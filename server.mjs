@@ -429,8 +429,8 @@ app.post('/api/merge', async (req, res) => {
     }
 
     // 獲取合併後的計數
-    const onlineCountResult = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
-    const onlineCountAfter = parseInt(onlineCountResult.rows[0].count);
+    const onlineCountAfterResult = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineCountAfter = parseInt(onlineCountAfterResult.rows[0].count);
 
     addLog('info', `表格 [${table}] 合併完成，合併 ${mergedCount} 行，重複 ${duplicateCount} 行`);
     
