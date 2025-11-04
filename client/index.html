@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM DevLog - 開發日誌工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #1e293b;
+            flex-wrap: wrap;
+        }
+
+        .nav-tab {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            color: #94a3b8;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .nav-tab:hover {
+            color: #e2e8f0;
+        }
+
+        .nav-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .content {
+            display: none;
+        }
+
+        .content.active {
+            display: block;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            border-color: #667eea;
+            box-shadow: 0 0 20px rgba(102, 126, 234, 0.1);
+        }
+
+        .card-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #f1f5f9;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .status-connected {
+            background: #10b981;
+            color: #ecfdf5;
+        }
+
+        .status-error {
+            background: #ef4444;
+            color: #fef2f2;
+        }
+
+        .status-disconnected {
+            background: #6b7280;
+            color: #f3f4f6;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #334155;
+            font-size: 13px;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .info-label {
+            color: #94a3b8;
+        }
+
+        .info-value {
+            color: #f1f5f9;
+            font-weight: 500;
+        }
+
+        .logs-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+        }
+
+        .log-entry {
+            padding: 10px;
+            margin-bottom: 8px;
+            border-left: 3px solid #667eea;
+            background: #0f172a;
+            border-radius: 4px;
+            font-size: 13px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .log-time {
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .log-level {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-weight: 600;
+            margin-right: 8px;
+            font-size: 11px;
+        }
+
+        .log-info {
+            background: #3b82f6;
+            color: #dbeafe;
+        }
+
+        .log-warn {
+            background: #f59e0b;
+            color: #fef3c7;
+        }
+
+        .log-error {
+            background: #ef4444;
+            color: #fee2e2;
+        }
+
+        .log-message {
+            color: #e2e8f0;
+        }
+
+        .button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+
+        .button:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .button-secondary {
+            background: #475569;
+        }
+
+        .button-secondary:hover {
+            background: #64748b;
+        }
+
+        .button-danger {
+            background: #ef4444;
+        }
+
+        .button-danger:hover {
+            background: #dc2626;
+        }
+
+        .button-success {
+            background: #10b981;
+        }
+
+        .button-success:hover {
+            background: #059669;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        select, textarea {
+            padding: 10px;
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: #e2e8f0;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            resize: vertical;
+        }
+
+        select {
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .table-container {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th {
+            background: #0f172a;
+            padding: 12px;
+            text-align: left;
+            border-bottom: 2px solid #334155;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #334155;
+            color: #cbd5e1;
+        }
+
+        tr:hover {
+            background: #334155;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .message-success {
+            background: #10b98130;
+            border: 1px solid #10b981;
+            color: #a7f3d0;
+        }
+
+        .message-error {
+            background: #ef444430;
+            border: 1px solid #ef4444;
+            color: #fca5a5;
+        }
+
+        .message-info {
+            background: #3b82f630;
+            border: 1px solid #3b82f6;
+            color: #93c5fd;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #667eea;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .pagination {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .pagination button {
+            padding: 8px 12px;
+            background: #475569;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .pagination button:hover {
+            background: #64748b;
+        }
+
+        .pagination button.active {
+            background: #667eea;
+        }
+
+        @media (max-width: 768px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-tabs {
+                gap: 5px;
+            }
+
+            .nav-tab {
+                padding: 10px 15px;
+                font-size: 12px;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 CRM DevLog</h1>
+            <p class="subtitle">開發日誌工具 - 實時監控、數據遷移、錯誤追蹤</p>
+        </header>
+
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="switchTab('dashboard')">📈 儀表板</button>
+            <button class="nav-tab" onclick="switchTab('logs')">📝 日誌</button>
+            <button class="nav-tab" onclick="switchTab('database')">🗄️ 數據庫</button>
+            <button class="nav-tab" onclick="switchTab('migrate')">🔄 數據遷移</button>
+        </div>
+
+        <!-- 儀表板 -->
+        <div id="dashboard" class="content active">
+            <div class="grid" id="environmentsGrid"></div>
+        </div>
+
+        <!-- 日誌 -->
+        <div id="logs" class="content">
+            <div class="input-group">
+                <select id="logLevel" onchange="refreshLogs()">
+                    <option value="all">所有級別</option>
+                    <option value="info">信息</option>
+                    <option value="warn">警告</option>
+                    <option value="error">錯誤</option>
+                </select>
+                <button class="button" onclick="refreshLogs()">🔄 刷新</button>
+                <button class="button button-danger" onclick="clearLogs()">🗑️ 清空日誌</button>
+            </div>
+            <div class="logs-container" id="logsContainer"></div>
+            <div class="pagination" id="logsPagination"></div>
+        </div>
+
+        <!-- 數據庫 -->
+        <div id="database" class="content">
+            <div class="input-group">
+                <select id="dbEnv" onchange="loadTables()">
+                    <option value="offline">OFFLINE (測試)</option>
+                    <option value="online">ONLINE (正式)</option>
+                </select>
+                <button class="button" onclick="loadTables()">📋 加載表格</button>
+            </div>
+
+            <div id="dbMessage"></div>
+
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px;">表格列表</h3>
+                <div id="tablesList" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px;"></div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <h3 style="margin-bottom: 10px;">SQL 查詢</h3>
+                <div class="input-group">
+                    <textarea id="sqlQuery" placeholder="SELECT * FROM customers LIMIT 10;"></textarea>
+                </div>
+                <button class="button" onclick="executeSql()">▶️ 執行查詢</button>
+            </div>
+
+            <div id="queryResult"></div>
+        </div>
+
+        <!-- 數據遷移 -->
+        <div id="migrate" class="content">
+            <h2 style="margin-bottom: 20px;">🔄 數據遷移工具</h2>
+            <p style="margin-bottom: 20px; color: #94a3b8;">
+                將數據從 OFFLINE (測試) 遷移到 ONLINE (正式)
+            </p>
+
+            <div class="input-group">
+                <button class="button button-success" onclick="migrateAll()">
+                    ⚡ 遷移所有表格
+                </button>
+                <button class="button" onclick="verifyAll()">
+                    ✓ 驗證所有表格
+                </button>
+            </div>
+
+            <div id="migrateMessage"></div>
+
+            <h3 style="margin-top: 30px; margin-bottom: 15px;">單個表格遷移</h3>
+            <div class="input-group">
+                <select id="migrateTable">
+                    <option value="">選擇表格...</option>
+                </select>
+                <button class="button" onclick="migrateTable()">遷移此表格</button>
+                <button class="button" onclick="verifyTable()">驗證此表格</button>
+            </div>
+
+            <div id="migrateResult"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentLogPage = 0;
+        const logsPerPage = 50;
+
+        async function switchTab(tabName) {
+            document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+
+            if (tabName === 'dashboard') {
+                loadEnvironments();
+            } else if (tabName === 'logs') {
+                refreshLogs();
+            } else if (tabName === 'database') {
+                loadTables();
+            } else if (tabName === 'migrate') {
+                loadMigrateTables();
+            }
+        }
+
+        async function loadEnvironments() {
+            try {
+                const response = await fetch('/api/environments');
+                const environments = await response.json();
+                const grid = document.getElementById('environmentsGrid');
+                grid.innerHTML = '';
+
+                for (const [env, info] of Object.entries(environments)) {
+                    const statusClass = `status-${info.status}`;
+                    const html = `
+                        <div class="card">
+                            <div class="card-title">${info.name}</div>
+                            <div class="status-badge ${statusClass}">${info.status.toUpperCase()}</div>
+                            <div class="info-row">
+                                <span class="info-label">狀態</span>
+                                <span class="info-value">${info.status}</span>
+                            </div>
+                            ${info.dbInfo ? `
+                                <div class="info-row">
+                                    <span class="info-label">連接池</span>
+                                    <span class="info-value">${info.dbInfo.poolSize}/${info.dbInfo.idleCount}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span class="info-label">版本</span>
+                                    <span class="info-value">${info.dbInfo.version.split(',')[0]}</span>
+                                </div>
+                            ` : ''}
+                            ${info.error ? `
+                                <div class="info-row" style="color: #fca5a5;">
+                                    <span class="info-label">錯誤</span>
+                                    <span class="info-value">${info.error}</span>
+                                </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    grid.innerHTML += html;
+                }
+            } catch (err) {
+                console.error('加載環境失敗:', err);
+            }
+        }
+
+        async function refreshLogs() {
+            currentLogPage = 0;
+            loadLogs();
+        }
+
+        async function loadLogs() {
+            try {
+                const level = document.getElementById('logLevel').value;
+                const limit = logsPerPage;
+                const offset = currentLogPage * logsPerPage;
+
+                const response = await fetch(`/api/logs?level=${level}&limit=${limit}&offset=${offset}`);
+                const data = await response.json();
+
+                const container = document.getElementById('logsContainer');
+                container.innerHTML = '';
+
+                if (data.logs.length === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 20px;">暫無日誌</div>';
+                } else {
+                    data.logs.forEach(log => {
+                        const levelClass = `log-${log.level}`;
+                        const html = `
+                            <div class="log-entry">
+                                <div class="log-time">${new Date(log.timestamp).toLocaleString('zh-TW')}</div>
+                                <span class="log-level ${levelClass}">${log.level.toUpperCase()}</span>
+                                <span class="log-message">${log.message}</span>
+                                ${log.data ? `<div style="color: #cbd5e1; margin-top: 5px;">📌 ${log.data}</div>` : ''}
+                            </div>
+                        `;
+                        container.innerHTML += html;
+                    });
+                }
+
+                // 分頁
+                const totalPages = Math.ceil(data.total / logsPerPage);
+                const pagination = document.getElementById('logsPagination');
+                pagination.innerHTML = '';
+
+                for (let i = 0; i < totalPages; i++) {
+                    const btn = document.createElement('button');
+                    btn.textContent = i + 1;
+                    btn.className = i === currentLogPage ? 'active' : '';
+                    btn.onclick = () => {
+                        currentLogPage = i;
+                        loadLogs();
+                    };
+                    pagination.appendChild(btn);
+                }
+            } catch (err) {
+                console.error('加載日誌失敗:', err);
+            }
+        }
+
+        async function clearLogs() {
+            if (!confirm('確定要清空所有日誌嗎？')) return;
+            try {
+                await fetch('/api/logs/clear', { method: 'POST' });
+                refreshLogs();
+                showMessage('日誌已清空', 'success', 'logs');
+            } catch (err) {
+                showMessage('清空日誌失敗: ' + err.message, 'error', 'logs');
+            }
+        }
+
+        async function loadTables() {
+            try {
+                const env = document.getElementById('dbEnv').value;
+                const response = await fetch(`/api/tables/${env}`);
+                const data = await response.json();
+
+                const tablesList = document.getElementById('tablesList');
+                tablesList.innerHTML = '';
+
+                data.tables.forEach(table => {
+                    const btn = document.createElement('button');
+                    btn.className = 'button button-secondary';
+                    btn.textContent = table;
+                    btn.onclick = () => loadTableData(table);
+                    tablesList.appendChild(btn);
+                });
+            } catch (err) {
+                showMessage('加載表格失敗: ' + err.message, 'error', 'database');
+            }
+        }
+
+        async function loadTableData(table) {
+            try {
+                const env = document.getElementById('dbEnv').value;
+                const response = await fetch(`/api/table/${env}/${table}?limit=100`);
+                const data = await response.json();
+
+                let html = `
+                    <h3 style="margin-bottom: 15px;">表格: ${table} (共 ${data.total} 行)</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    ${data.columns.map(col => `<th>${col.name}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.rows.map(row => `
+                                    <tr>
+                                        ${data.columns.map(col => `<td>${JSON.stringify(row[col.name])}</td>`).join('')}
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                document.getElementById('queryResult').innerHTML = html;
+            } catch (err) {
+                showMessage('加載表格數據失敗: ' + err.message, 'error', 'database');
+            }
+        }
+
+        async function executeSql() {
+            try {
+                const env = document.getElementById('dbEnv').value;
+                const sql = document.getElementById('sqlQuery').value.trim();
+
+                if (!sql) {
+                    showMessage('請輸入 SQL 查詢', 'error', 'database');
+                    return;
+                }
+
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ env, sql })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage('查詢失敗: ' + data.error, 'error', 'database');
+                    return;
+                }
+
+                let html = `
+                    <h3 style="margin-bottom: 15px;">查詢結果 (${data.rowCount} 行)</h3>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    ${data.fields.map(field => `<th>${field.name}</th>`).join('')}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.rows.map(row => `
+                                    <tr>
+                                        ${data.fields.map(field => `<td>${JSON.stringify(row[field.name])}</td>`).join('')}
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                document.getElementById('queryResult').innerHTML = html;
+                showMessage('查詢成功', 'success', 'database');
+            } catch (err) {
+                showMessage('執行查詢失敗: ' + err.message, 'error', 'database');
+            }
+        }
+
+        async function loadMigrateTables() {
+            try {
+                const response = await fetch('/api/tables/offline');
+                const data = await response.json();
+
+                const select = document.getElementById('migrateTable');
+                select.innerHTML = '<option value="">選擇表格...</option>';
+
+                data.tables.forEach(table => {
+                    const option = document.createElement('option');
+                    option.value = table;
+                    option.textContent = table;
+                    select.appendChild(option);
+                });
+            } catch (err) {
+                showMessage('加載表格失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        async function migrateTable() {
+            const table = document.getElementById('migrateTable').value;
+            if (!table) {
+                showMessage('請選擇表格', 'error', 'migrate');
+                return;
+            }
+
+            if (!confirm(`確定要遷移表格 "${table}" 嗎？`)) return;
+
+            try {
+                const response = await fetch('/api/migrate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage('遷移失敗: ' + data.error, 'error', 'migrate');
+                    return;
+                }
+
+                showMessage(`✓ 遷移成功！共遷移 ${data.rowCount} 行`, 'success', 'migrate');
+                loadMigrateTables();
+            } catch (err) {
+                showMessage('遷移失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        async function migrateAll() {
+            if (!confirm('確定要遷移所有表格嗎？這將清空 ONLINE 環境的所有數據！')) return;
+
+            try {
+                document.getElementById('migrateMessage').innerHTML = '<div class="message message-info"><span class="loading"></span> 正在遷移...</div>';
+
+                const response = await fetch('/api/migrate-all', { method: 'POST' });
+                const data = await response.json();
+
+                let html = '<h3 style="margin-bottom: 15px;">遷移結果</h3>';
+                data.results.forEach(result => {
+                    const statusClass = result.status === 'success' ? 'success' : result.status === 'skipped' ? 'info' : 'error';
+                    html += `
+                        <div class="message message-${statusClass}">
+                            <strong>${result.table}</strong>: ${result.status} ${result.rowCount ? `(${result.rowCount} 行)` : ''} ${result.error ? `- ${result.error}` : ''}
+                        </div>
+                    `;
+                });
+
+                document.getElementById('migrateResult').innerHTML = html;
+                showMessage('✓ 遷移完成！', 'success', 'migrate');
+            } catch (err) {
+                showMessage('遷移失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        async function verifyTable() {
+            const table = document.getElementById('migrateTable').value;
+            if (!table) {
+                showMessage('請選擇表格', 'error', 'migrate');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table })
+                });
+
+                const data = await response.json();
+
+                const statusClass = data.match ? 'success' : 'error';
+                const message = data.match 
+                    ? `✓ 數據完整！OFFLINE: ${data.offlineRows} 行, ONLINE: ${data.onlineRows} 行`
+                    : `✗ 數據不匹配！OFFLINE: ${data.offlineRows} 行, ONLINE: ${data.onlineRows} 行`;
+
+                showMessage(message, statusClass, 'migrate');
+            } catch (err) {
+                showMessage('驗證失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        async function verifyAll() {
+            try {
+                const response = await fetch('/api/tables/offline');
+                const data = await response.json();
+
+                document.getElementById('migrateMessage').innerHTML = '<div class="message message-info"><span class="loading"></span> 正在驗證...</div>';
+
+                let html = '<h3 style="margin-bottom: 15px;">驗證結果</h3>';
+                let allMatch = true;
+
+                for (const table of data.tables) {
+                    const verifyResponse = await fetch('/api/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ table })
+                    });
+
+                    const verifyData = await verifyResponse.json();
+                    const statusClass = verifyData.match ? 'success' : 'error';
+
+                    if (!verifyData.match) allMatch = false;
+
+                    html += `
+                        <div class="message message-${statusClass}">
+                            <strong>${table}</strong>: ${verifyData.match ? '✓ 匹配' : '✗ 不匹配'} (OFFLINE: ${verifyData.offlineRows}, ONLINE: ${verifyData.onlineRows})
+                        </div>
+                    `;
+                }
+
+                document.getElementById('migrateResult').innerHTML = html;
+                showMessage(allMatch ? '✓ 所有表格驗證通過！' : '✗ 某些表格驗證失敗', allMatch ? 'success' : 'error', 'migrate');
+            } catch (err) {
+                showMessage('驗證失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        function showMessage(msg, type, tab) {
+            const msgDiv = document.getElementById(tab + 'Message') || document.getElementById('migrateMessage');
+            if (msgDiv) {
+                msgDiv.innerHTML = `<div class="message message-${type}">${msg}</div>`;
+                setTimeout(() => {
+                    msgDiv.innerHTML = '';
+                }, 5000);
+            }
+        }
+
+        // 初始化
+        loadEnvironments();
+    </script>
+</body>
+</html>
