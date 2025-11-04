@@ -475,6 +475,50 @@
 
             <div id="migrateMessage"></div>
 
+
+                <h3>按客戶選擇遷移</h3>
+                <div style="margin-bottom: 15px;">
+                    <label><strong>選擇環境：</strong></label>
+                    <select id="selectDatabase" style="width: 200px; padding: 8px;">
+                        <option value="offline">OFFLINE (測試)</option>
+                        <option value="online">ONLINE (正式)</option>
+                    </select>
+                    <button onclick="loadCustomerList()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-left: 10px;">加載客戶列表</button>
+                </div>
+
+                <div id="customerListContainer" style="margin-bottom: 15px; display: none;">
+                    <div style="margin-bottom: 10px;">
+                        <button onclick="selectAllCustomers()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 5px;">全選</button>
+                        <button onclick="deselectAllCustomers()" style="padding: 6px 12px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">反選</button>
+                        <span id="selectedCount" style="color: #666; font-weight: bold;">已選擇: 0 個客戶</span>
+                    </div>
+
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 4px; padding: 10px;">
+                        <table id="customerTable" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: #f5f5f5; border-bottom: 2px solid #ddd;">
+                                    <th style="padding: 10px; text-align: left; width: 40px;">選擇</th>
+                                    <th style="padding: 10px; text-align: left;">ID</th>
+                                    <th style="padding: 10px; text-align: left;">名稱</th>
+                                    <th style="padding: 10px; text-align: left;">郵箱</th>
+                                    <th style="padding: 10px; text-align: left;">公司</th>
+                                    <th style="padding: 10px; text-align: left;">狀態</th>
+                                </tr>
+                            </thead>
+                            <tbody id="customerTableBody">
+                                <tr><td colspan="6" style="text-align: center; padding: 20px; color: #999;">加載中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div style="margin-top: 15px;">
+                        <button onclick="migrateSelectedCustomers()" style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">遷移選中的客戶</button>
+                        <button onclick="mergeSelectedCustomers()" style="padding: 10px 20px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">合併選中的客戶</button>
+                    </div>
+
+                    <div id="selectResult" style="margin-top: 15px;"></div>
+                </div>
+
             <h3 style="margin-top: 30px; margin-bottom: 15px;">單個表格遷移</h3>
             <div class="input-group">
                 <select id="migrateTable">
@@ -1065,6 +1109,149 @@
             }
         }
     </script>
+
+        // 加載客戶列表
+        async function loadCustomerList() {
+            const database = document.getElementById('selectDatabase').value;
+            const tbody = document.getElementById('customerTableBody');
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">加載中...</td></tr>';
+            
+            try {
+                const response = await fetch('/api/get-table-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table: 'customers', database })
+                });
+                const result = await response.json();
+                
+                if (!result.success) {
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: red;">錯誤: ${result.error}</td></tr>`;
+                    return;
+                }
+                
+                tbody.innerHTML = '';
+                result.data.forEach(customer => {
+                    const row = document.createElement('tr');
+                    row.style.borderBottom = '1px solid #eee';
+                    row.innerHTML = `
+                        <td style="padding: 10px;"><input type="checkbox" class="customerCheckbox" value="${customer.id}" onchange="updateSelectedCount()"></td>
+                        <td style="padding: 10px;">${customer.id}</td>
+                        <td style="padding: 10px;">${customer.name || '-'}</td>
+                        <td style="padding: 10px;">${customer.email || '-'}</td>
+                        <td style="padding: 10px;">${customer.company || '-'}</td>
+                        <td style="padding: 10px;">${customer.status || '-'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+                
+                document.getElementById('customerListContainer').style.display = 'block';
+                updateSelectedCount();
+            } catch (err) {
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: red;">錯誤: ${err.message}</td></tr>`;
+            }
+        }
+
+        // 全選
+        function selectAllCustomers() {
+            document.querySelectorAll('.customerCheckbox').forEach(cb => cb.checked = true);
+            updateSelectedCount();
+        }
+
+        // 反選
+        function deselectAllCustomers() {
+            document.querySelectorAll('.customerCheckbox').forEach(cb => cb.checked = false);
+            updateSelectedCount();
+        }
+
+        // 更新選中計數
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.customerCheckbox:checked').length;
+            document.getElementById('selectedCount').textContent = `已選擇: ${count} 個客戶`;
+        }
+
+        // 獲取選中的 ID
+        function getSelectedIds() {
+            return Array.from(document.querySelectorAll('.customerCheckbox:checked')).map(cb => parseInt(cb.value));
+        }
+
+        // 遷移選中的客戶
+        async function migrateSelectedCustomers() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) {
+                alert('請先選擇客戶');
+                return;
+            }
+            
+            if (!confirm(`確認遷移 ${ids.length} 個客戶嗎？\n\nOFFLINE 的數據將被刪除，ONLINE 將增加這些客戶。`)) {
+                return;
+            }
+            
+            const resultDiv = document.getElementById('selectResult');
+            resultDiv.innerHTML = '<p style="color: #666;">遷移中...</p>';
+            
+            try {
+                const response = await fetch('/api/migrate-by-ids', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table: 'customers', ids })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 15px; color: #155724;">
+                            <strong>✓ ${result.message}</strong><br>
+                            OFFLINE: ${result.offlineRowsBefore} → ${result.offlineRowsAfter}<br>
+                            ONLINE: ${result.onlineRowsBefore} → ${result.onlineRowsAfter}
+                        </div>
+                    `;
+                    setTimeout(() => loadCustomerList(), 2000);
+                } else {
+                    resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${result.error}</strong></div>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${err.message}</strong></div>`;
+            }
+        }
+
+        // 合併選中的客戶
+        async function mergeSelectedCustomers() {
+            const ids = getSelectedIds();
+            if (ids.length === 0) {
+                alert('請先選擇客戶');
+                return;
+            }
+            
+            if (!confirm(`確認合併 ${ids.length} 個客戶嗎？\n\nOFFLINE 的數據將保留，ONLINE 將增加這些客戶。`)) {
+                return;
+            }
+            
+            const resultDiv = document.getElementById('selectResult');
+            resultDiv.innerHTML = '<p style="color: #666;">合併中...</p>';
+            
+            try {
+                const response = await fetch('/api/merge-by-ids', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table: 'customers', ids })
+                });
+                const result = await response.json();
+                
+                if (result.success) {
+                    resultDiv.innerHTML = `
+                        <div style="background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; padding: 15px; color: #155724;">
+                            <strong>✓ ${result.message}</strong><br>
+                            OFFLINE: ${result.offlineRowsBefore} (保留)<br>
+                            ONLINE: ${result.onlineRowsBefore} → ${result.onlineRowsAfter}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${result.error}</strong></div>`;
+                }
+            } catch (err) {
+                resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${err.message}</strong></div>`;
+            }
+        }
 </body>
                 <h3>單個表格遷移</h3>
                 <div style="margin-bottom: 15px;">
