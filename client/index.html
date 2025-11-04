@@ -927,6 +927,194 @@
         // 初始化
         loadEnvironments();
         loadMigrateTables();
+
+        // 監聽遷移模式變化
+        document.querySelectorAll('input[name="migrateMode"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                document.getElementById('rangeOptions').style.display = this.value === 'range' ? 'block' : 'none';
+                document.getElementById('conditionOptions').style.display = this.value === 'condition' ? 'block' : 'none';
+            });
+        });
+
+        // 預覽 ID 範圍遷移
+        async function previewRangeMigration() {
+            const table = document.getElementById('migrateTable').value;
+            const idFrom = parseInt(document.getElementById('idFrom').value);
+            const idTo = parseInt(document.getElementById('idTo').value);
+
+            if (!table || isNaN(idFrom) || isNaN(idTo)) {
+                showMessage('請填寫完整的參數', 'error', 'migrate');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/preview-migrate-range', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table, idFrom, idTo })
+                });
+
+                const data = await response.json();
+                document.getElementById('rangePreview').textContent = `將遷移 ${data.rowCount} 行`;
+            } catch (err) {
+                showMessage('預覽失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        // 預覽條件遷移
+        async function previewConditionMigration() {
+            const table = document.getElementById('migrateTable').value;
+            const condition = document.getElementById('condition').value;
+
+            if (!table || !condition) {
+                showMessage('請填寫完整的參數', 'error', 'migrate');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/preview-migrate-condition', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ table, condition })
+                });
+
+                const data = await response.json();
+                document.getElementById('conditionPreview').textContent = `將遷移 ${data.rowCount} 行`;
+            } catch (err) {
+                showMessage('預覽失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
+
+        // 執行部分遷移
+        async function partialMigrateTable() {
+            const table = document.getElementById('migrateTable').value;
+            const mode = document.querySelector('input[name="migrateMode"]:checked').value;
+
+            if (!table) {
+                showMessage('請選擇表格', 'error', 'migrate');
+                return;
+            }
+
+            if (mode === 'full') {
+                showMessage('請選擇部分遷移模式（ID 範圍或條件）', 'error', 'migrate');
+                return;
+            }
+
+            let endpoint, body, confirmMsg;
+
+            if (mode === 'range') {
+                const idFrom = parseInt(document.getElementById('idFrom').value);
+                const idTo = parseInt(document.getElementById('idTo').value);
+
+                if (isNaN(idFrom) || isNaN(idTo)) {
+                    showMessage('請填寫 ID 範圍', 'error', 'migrate');
+                    return;
+                }
+
+                endpoint = '/api/migrate-range';
+                body = { table, idFrom, idTo };
+                confirmMsg = `確定要遷移表格 "${table}" 的 ID ${idFrom}-${idTo} 嗎？`;
+            } else if (mode === 'condition') {
+                const condition = document.getElementById('condition').value;
+
+                if (!condition) {
+                    showMessage('請填寫 SQL 條件', 'error', 'migrate');
+                    return;
+                }
+
+                endpoint = '/api/migrate-condition';
+                body = { table, condition };
+                confirmMsg = `確定要遷移表格 "${table}" 符合條件的數據嗎？\n條件: ${condition}`;
+            }
+
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    showMessage('部分遷移失敗: ' + data.error, 'error', 'migrate');
+                    return;
+                }
+
+                const resultHtml = `
+                    <div class="message message-success">
+                        <strong>✓ 部分遷移成功！</strong><br>
+                        <strong>OFFLINE 環境：</strong><br>
+                        &nbsp;&nbsp;遷移前: ${data.offlineRowsBefore} 行<br>
+                        &nbsp;&nbsp;遷移後: ${data.offlineRowsAfter} 行<br>
+                        <strong>ONLINE 環境：</strong><br>
+                        &nbsp;&nbsp;遷移前: ${data.onlineRowsBefore} 行<br>
+                        &nbsp;&nbsp;遷移後: ${data.onlineRowsAfter} 行<br>
+                        <strong>遷移結果：</strong><br>
+                        &nbsp;&nbsp;成功遷移: ${data.migratedCount} 行<br>
+                        &nbsp;&nbsp;跳過重複: ${data.duplicateCount} 行
+                    </div>
+                `;
+                document.getElementById('migrateResult').innerHTML = resultHtml;
+                showMessage(data.message, 'success', 'migrate');
+                loadMigrateTables();
+            } catch (err) {
+                showMessage('部分遷移失敗: ' + err.message, 'error', 'migrate');
+            }
+        }
     </script>
 </body>
-</html>
+                <h3>單個表格遷移</h3>
+                <div style="margin-bottom: 15px;">
+                    <select id="migrateTable" style="width: 100%; padding: 8px; margin-bottom: 10px;">
+                        <option value="">選擇表格...</option>
+                        <option value="customers">customers</option>
+                        <option value="users">users</option>
+                    </select>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 10px;"><strong>遷移模式：</strong></label>
+                    <div style="margin-left: 10px;">
+                        <label style="display: block; margin-bottom: 8px;">
+                            <input type="radio" name="migrateMode" value="full" checked> 全部遷移
+                        </label>
+                        <label style="display: block; margin-bottom: 8px;">
+                            <input type="radio" name="migrateMode" value="range"> ID 範圍遷移
+                        </label>
+                        <label style="display: block; margin-bottom: 8px;">
+                            <input type="radio" name="migrateMode" value="condition"> 條件遷移
+                        </label>
+                    </div>
+                </div>
+
+                <div id="rangeOptions" style="display: none; margin-bottom: 15px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                    <label style="display: block; margin-bottom: 8px;">
+                        ID 從：<input type="number" id="idFrom" placeholder="1" style="width: 100px; padding: 5px;">
+                    </label>
+                    <label style="display: block; margin-bottom: 8px;">
+                        ID 到：<input type="number" id="idTo" placeholder="50" style="width: 100px; padding: 5px;">
+                    </label>
+                    <button onclick="previewRangeMigration()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">預覽</button>
+                    <span id="rangePreview" style="margin-left: 10px; color: #666;"></span>
+                </div>
+
+                <div id="conditionOptions" style="display: none; margin-bottom: 15px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
+                    <label style="display: block; margin-bottom: 8px;">
+                        SQL 條件：<input type="text" id="condition" placeholder="status = 'active'" style="width: 100%; padding: 5px; box-sizing: border-box;">
+                    </label>
+                    <small style="color: #666;">例如：status = 'active' 或 created_at >= '2025-01-01'</small><br>
+                    <button onclick="previewConditionMigration()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 8px;">預覽</button>
+                    <span id="conditionPreview" style="margin-left: 10px; color: #666;"></span>
+                </div>
+
+                <div style="margin-bottom: 15px;">
+                    <button onclick="migrateTable()" style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">遷移此表格</button>
+                    <button onclick="partialMigrateTable()" style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">執行部分遷移</button>
+                    <button onclick="mergeTable()" style="padding: 10px 20px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">合併此表格</button>
+                    <button onclick="validateTable()" style="padding: 10px 20px; background: #00BCD4; color: white; border: none; border-radius: 4px; cursor: pointer;">驗證此表格</button>
+                </div>
+
+                <div id="migrateResult" style="margin-top: 15px;"></div>

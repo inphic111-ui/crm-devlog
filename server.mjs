@@ -496,6 +496,275 @@ app.post('/api/merge', async (req, res) => {
   }
 });
 
+// API: 部分遷移 - 按 ID 範圍
+app.post('/api/migrate-range', async (req, res) => {
+  const { table, idFrom, idTo } = req.body;
+
+  if (!table || idFrom === undefined || idTo === undefined) {
+    return res.status(400).json({ error: '缺少必要參數: table, idFrom, idTo' });
+  }
+
+  const offlinePool = pools['offline'];
+  const onlinePool = pools['online'];
+
+  if (!offlinePool || !onlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+
+  try {
+    addLog('info', `開始部分遷移表格 [${table}] - ID 範圍 ${idFrom}-${idTo}`);
+
+    // 1. 獲取 OFFLINE 的數據計數
+    const offlineCountBefore = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsBefore = parseInt(offlineCountBefore.rows[0].count);
+
+    // 2. 獲取 ONLINE 的數據計數
+    const onlineCountBefore = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsBefore = parseInt(onlineCountBefore.rows[0].count);
+
+    // 3. 獲取 OFFLINE 的指定範圍數據
+    const sourceResult = await offlinePool.query(
+      `SELECT * FROM "${table}" WHERE id >= $1 AND id <= $2 ORDER BY id`,
+      [idFrom, idTo]
+    );
+    const rows = sourceResult.rows;
+
+    if (rows.length === 0) {
+      addLog('warn', `表格 [${table}] 在 ID 範圍 ${idFrom}-${idTo} 內無數據`);
+      return res.json({ 
+        success: true, 
+        message: '指定範圍內無數據', 
+        rowCount: 0,
+        offlineRowsBefore,
+        onlineRowsBefore,
+        migratedCount: 0
+      });
+    }
+
+    // 4. 將數據插入到 ONLINE
+    const columns = Object.keys(rows[0]);
+    const columnNames = columns.map(c => `"${c}"`).join(', ');
+    let insertedCount = 0;
+    let duplicateCount = 0;
+    
+    for (const row of rows) {
+      try {
+        const values = columns.map(c => row[c]);
+        const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+        
+        await onlinePool.query(
+          `INSERT INTO "${table}" (${columnNames}) VALUES (${placeholders})`,
+          values
+        );
+        insertedCount++;
+      } catch (err) {
+        if (err.code === '23505') {
+          duplicateCount++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    addLog('info', `表格 [${table}] 已插入 ONLINE，共 ${insertedCount} 行，跳過重複 ${duplicateCount} 行`);
+
+    // 5. 刪除 OFFLINE 的指定範圍數據
+    await offlinePool.query(
+      `DELETE FROM "${table}" WHERE id >= $1 AND id <= $2`,
+      [idFrom, idTo]
+    );
+    addLog('info', `表格 [${table}] 已從 OFFLINE 刪除 ID 範圍 ${idFrom}-${idTo}，共 ${rows.length} 行`);
+
+    // 6. 獲取遷移後的計數
+    const offlineCountAfter = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsAfter = parseInt(offlineCountAfter.rows[0].count);
+
+    const onlineCountAfter = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsAfter = parseInt(onlineCountAfter.rows[0].count);
+
+    addLog('info', `部分遷移完成 [${table}]: OFFLINE ${offlineRowsBefore}→${offlineRowsAfter}, ONLINE ${onlineRowsBefore}→${onlineRowsAfter}`);
+
+    res.json({ 
+      success: true, 
+      message: `部分遷移成功（ID ${idFrom}-${idTo}），共遷移 ${insertedCount} 行，跳過重複 ${duplicateCount} 行`,
+      offlineRowsBefore,
+      offlineRowsAfter,
+      onlineRowsBefore,
+      onlineRowsAfter,
+      migratedCount: insertedCount,
+      duplicateCount,
+      idRange: { from: idFrom, to: idTo }
+    });
+  } catch (err) {
+    addLog('error', `部分遷移失敗 [${table}]`, err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// API: 部分遷移 - 按條件
+app.post('/api/migrate-condition', async (req, res) => {
+  const { table, condition } = req.body;
+
+  if (!table || !condition) {
+    return res.status(400).json({ error: '缺少必要參數: table, condition' });
+  }
+
+  const offlinePool = pools['offline'];
+  const onlinePool = pools['online'];
+
+  if (!offlinePool || !onlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+
+  try {
+    addLog('info', `開始部分遷移表格 [${table}] - 條件: ${condition}`);
+
+    // 1. 獲取 OFFLINE 的數據計數
+    const offlineCountBefore = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsBefore = parseInt(offlineCountBefore.rows[0].count);
+
+    // 2. 獲取 ONLINE 的數據計數
+    const onlineCountBefore = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsBefore = parseInt(onlineCountBefore.rows[0].count);
+
+    // 3. 獲取 OFFLINE 的符合條件的數據
+    const sourceResult = await offlinePool.query(
+      `SELECT * FROM "${table}" WHERE ${condition}`
+    );
+    const rows = sourceResult.rows;
+
+    if (rows.length === 0) {
+      addLog('warn', `表格 [${table}] 符合條件的數據為空`);
+      return res.json({ 
+        success: true, 
+        message: '符合條件的數據為空', 
+        rowCount: 0,
+        offlineRowsBefore,
+        onlineRowsBefore,
+        migratedCount: 0
+      });
+    }
+
+    // 4. 將數據插入到 ONLINE
+    const columns = Object.keys(rows[0]);
+    const columnNames = columns.map(c => `"${c}"`).join(', ');
+    let insertedCount = 0;
+    let duplicateCount = 0;
+    
+    for (const row of rows) {
+      try {
+        const values = columns.map(c => row[c]);
+        const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+        
+        await onlinePool.query(
+          `INSERT INTO "${table}" (${columnNames}) VALUES (${placeholders})`,
+          values
+        );
+        insertedCount++;
+      } catch (err) {
+        if (err.code === '23505') {
+          duplicateCount++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    addLog('info', `表格 [${table}] 已插入 ONLINE，共 ${insertedCount} 行，跳過重複 ${duplicateCount} 行`);
+
+    // 5. 刪除 OFFLINE 的符合條件的數據
+    await offlinePool.query(
+      `DELETE FROM "${table}" WHERE ${condition}`
+    );
+    addLog('info', `表格 [${table}] 已從 OFFLINE 刪除符合條件的數據，共 ${rows.length} 行`);
+
+    // 6. 獲取遷移後的計數
+    const offlineCountAfter = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsAfter = parseInt(offlineCountAfter.rows[0].count);
+
+    const onlineCountAfter = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsAfter = parseInt(onlineCountAfter.rows[0].count);
+
+    addLog('info', `部分遷移完成 [${table}]: OFFLINE ${offlineRowsBefore}→${offlineRowsAfter}, ONLINE ${onlineRowsBefore}→${onlineRowsAfter}`);
+
+    res.json({ 
+      success: true, 
+      message: `部分遷移成功（條件: ${condition}），共遷移 ${insertedCount} 行，跳過重複 ${duplicateCount} 行`,
+      offlineRowsBefore,
+      offlineRowsAfter,
+      onlineRowsBefore,
+      onlineRowsAfter,
+      migratedCount: insertedCount,
+      duplicateCount,
+      condition
+    });
+  } catch (err) {
+    addLog('error', `部分遷移失敗 [${table}]`, err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// API: 預覽部分遷移 - 按 ID 範圍
+app.post('/api/preview-migrate-range', async (req, res) => {
+  const { table, idFrom, idTo } = req.body;
+
+  if (!table || idFrom === undefined || idTo === undefined) {
+    return res.status(400).json({ error: '缺少必要參數' });
+  }
+
+  const offlinePool = pools['offline'];
+
+  if (!offlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+
+  try {
+    const result = await offlinePool.query(
+      `SELECT COUNT(*) as count FROM "${table}" WHERE id >= $1 AND id <= $2`,
+      [idFrom, idTo]
+    );
+    const rowCount = parseInt(result.rows[0].count);
+
+    res.json({ 
+      success: true, 
+      rowCount,
+      message: `將遷移 ${rowCount} 行`
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// API: 預覽部分遷移 - 按條件
+app.post('/api/preview-migrate-condition', async (req, res) => {
+  const { table, condition } = req.body;
+
+  if (!table || !condition) {
+    return res.status(400).json({ error: '缺少必要參數' });
+  }
+
+  const offlinePool = pools['offline'];
+
+  if (!offlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+
+  try {
+    const result = await offlinePool.query(
+      `SELECT COUNT(*) as count FROM "${table}" WHERE ${condition}`
+    );
+    const rowCount = parseInt(result.rows[0].count);
+
+    res.json({ 
+      success: true, 
+      rowCount,
+      message: `將遷移 ${rowCount} 行`
+    });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // API: 驗證數據完整性
 app.post('/api/verify', async (req, res) => {
   const { table } = req.body;
