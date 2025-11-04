@@ -746,7 +746,7 @@
                 return;
             }
 
-            if (!confirm(`確定要遷移表格 "${table}" 嗎？此操作將使用剪下+貼上模式，OFFLINE 的數據將被刪除，ONLINE 的數據將被保留並新增。`)) return;
+            if (!confirm(`確定要遷移表格 "${table}" 嗎？`)) return;
 
             try {
                 const response = await fetch('/api/migrate', {
@@ -762,22 +762,7 @@
                     return;
                 }
 
-                const resultHtml = `
-                    <div class="message message-success">
-                        <strong>✓ 遷移成功（剪下+貼上模式）！</strong><br>
-                        <strong>OFFLINE 環境：</strong><br>
-                        &nbsp;&nbsp;遷移前: ${data.offlineRowsBefore} 行<br>
-                        &nbsp;&nbsp;遷移後: ${data.offlineRowsAfter} 行<br>
-                        <strong>ONLINE 環境：</strong><br>
-                        &nbsp;&nbsp;遷移前: ${data.onlineRowsBefore} 行<br>
-                        &nbsp;&nbsp;遷移後: ${data.onlineRowsAfter} 行<br>
-                        <strong>遷移結果：</strong><br>
-                        &nbsp;&nbsp;成功遷移: ${data.migratedCount} 行<br>
-                        &nbsp;&nbsp;跳過重複: ${data.duplicateCount} 行
-                    </div>
-                `;
-                document.getElementById('migrateResult').innerHTML = resultHtml;
-                showMessage(data.message, 'success', 'migrate');
+                showMessage(`✓ 遷移成功！共遷移 ${data.rowCount} 行`, 'success', 'migrate');
                 loadMigrateTables();
             } catch (err) {
                 showMessage('遷移失敗: ' + err.message, 'error', 'migrate');

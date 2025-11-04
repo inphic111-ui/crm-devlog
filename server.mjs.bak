@@ -254,7 +254,6 @@ app.get('/api/table/:env/:table', async (req, res) => {
 });
 
 // API: 數據遷移 - 從 OFFLINE 複製到 ONLINE
-// API: 數據遷移 - 從 OFFLINE 剪下到 ONLINE（不覆蓋）
 app.post('/api/migrate', async (req, res) => {
   const { table } = req.body;
 
@@ -270,83 +269,37 @@ app.post('/api/migrate', async (req, res) => {
   }
 
   try {
-    addLog('info', `開始遷移表格 [${table}] - 剪下+貼上模式`);
+    addLog('info', `開始遷移表格 [${table}]`);
 
-    // 1. 獲取 OFFLINE 的數據計數
-    const offlineCountBefore = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
-    const offlineRowsBefore = parseInt(offlineCountBefore.rows[0].count);
-
-    // 2. 獲取 ONLINE 的數據計數
-    const onlineCountBefore = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
-    const onlineRowsBefore = parseInt(onlineCountBefore.rows[0].count);
-
-    // 3. 獲取 OFFLINE 的數據
+    // 獲取 OFFLINE 的數據
     const sourceResult = await offlinePool.query(`SELECT * FROM "${table}"`);
     const rows = sourceResult.rows;
 
     if (rows.length === 0) {
-      addLog('warn', `表格 [${table}] 在 OFFLINE 為空，無需遷移`);
-      return res.json({ 
-        success: true, 
-        message: '表格為空，無需遷移', 
-        rowCount: 0,
-        offlineRowsBefore,
-        onlineRowsBefore,
-        migratedCount: 0
-      });
+      addLog('warn', `表格 [${table}] 為空`);
+      return res.json({ success: true, message: '表格為空，無需遷移', rowCount: 0 });
     }
 
-    // 4. 將數據插入到 ONLINE（不清空現有數據）
+    // 清空 ONLINE 的表格
+    await onlinePool.query(`TRUNCATE TABLE "${table}" CASCADE`);
+    addLog('info', `已清空 ONLINE 表格 [${table}]`);
+
+    // 插入數據
     const columns = Object.keys(rows[0]);
     const columnNames = columns.map(c => `"${c}"`).join(', ');
-    let insertedCount = 0;
-    let duplicateCount = 0;
     
     for (const row of rows) {
-      try {
-        const values = columns.map(c => row[c]);
-        const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
-        
-        await onlinePool.query(
-          `INSERT INTO "${table}" (${columnNames}) VALUES (${placeholders})`,
-          values
-        );
-        insertedCount++;
-      } catch (err) {
-        // 如果是重複鍵錯誤，跳過
-        if (err.code === '23505') {
-          duplicateCount++;
-        } else {
-          throw err;
-        }
-      }
+      const values = columns.map(c => row[c]);
+      const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+      
+      await onlinePool.query(
+        `INSERT INTO "${table}" (${columnNames}) VALUES (${placeholders})`,
+        values
+      );
     }
 
-    addLog('info', `表格 [${table}] 已插入 ONLINE，共 ${insertedCount} 行，跳過重複 ${duplicateCount} 行`);
-
-    // 5. 刪除 OFFLINE 的數據（剪下的第二步）
-    await offlinePool.query(`DELETE FROM "${table}"`);
-    addLog('info', `表格 [${table}] 已從 OFFLINE 刪除，共 ${rows.length} 行`);
-
-    // 6. 獲取遷移後的計數
-    const offlineCountAfter = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
-    const offlineRowsAfter = parseInt(offlineCountAfter.rows[0].count);
-
-    const onlineCountAfter = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
-    const onlineRowsAfter = parseInt(onlineCountAfter.rows[0].count);
-
-    addLog('info', `遷移完成 [${table}]: OFFLINE ${offlineRowsBefore}→${offlineRowsAfter}, ONLINE ${onlineRowsBefore}→${onlineRowsAfter}`);
-
-    res.json({ 
-      success: true, 
-      message: `遷移成功（剪下+貼上模式），共遷移 ${insertedCount} 行，跳過重複 ${duplicateCount} 行`,
-      offlineRowsBefore,
-      offlineRowsAfter,
-      onlineRowsBefore,
-      onlineRowsAfter,
-      migratedCount: insertedCount,
-      duplicateCount
-    });
+    addLog('info', `表格 [${table}] 遷移完成，共 ${rows.length} 行`);
+    res.json({ success: true, message: `遷移成功，共 ${rows.length} 行`, rowCount: rows.length });
   } catch (err) {
     addLog('error', `遷移失敗 [${table}]`, err.message);
     res.status(400).json({ error: err.message });
