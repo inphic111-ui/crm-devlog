@@ -813,6 +813,125 @@ app.get('/', (req, res) => {
 });
 
 // 啟動服務器
+
+// API: 按 ID 列表遷移
+app.post('/api/migrate-by-ids', async (req, res) => {
+  const { table, ids } = req.body;
+  if (!table || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '缺少參數或 ID 列表為空' });
+  }
+  const offlinePool = pools['offline'];
+  const onlinePool = pools['online'];
+  if (!offlinePool || !onlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+  try {
+    const offlineCountBefore = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsBefore = parseInt(offlineCountBefore.rows[0].count);
+    const onlineCountBefore = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsBefore = parseInt(onlineCountBefore.rows[0].count);
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+    const sourceResult = await offlinePool.query(
+      `SELECT * FROM "${table}" WHERE id IN (${placeholders})`,
+      ids
+    );
+    const rows = sourceResult.rows;
+    if (rows.length === 0) {
+      return res.json({ success: true, message: '指定 ID 的數據為空', migratedCount: 0 });
+    }
+    const columns = Object.keys(rows[0]);
+    const columnNames = columns.map(c => `"${c}"`).join(', ');
+    let insertedCount = 0, duplicateCount = 0;
+    for (const row of rows) {
+      try {
+        const values = columns.map(c => row[c]);
+        const ph = columns.map((_, i) => `$${i + 1}`).join(', ');
+        await onlinePool.query(`INSERT INTO "${table}" (${columnNames}) VALUES (${ph})`, values);
+        insertedCount++;
+      } catch (err) {
+        if (err.code === '23505') duplicateCount++;
+        else throw err;
+      }
+    }
+    await offlinePool.query(`DELETE FROM "${table}" WHERE id IN (${placeholders})`, ids);
+    const offlineCountAfter = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsAfter = parseInt(offlineCountAfter.rows[0].count);
+    const onlineCountAfter = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsAfter = parseInt(onlineCountAfter.rows[0].count);
+    addLog('info', `按 ID 遷移完成: ${insertedCount} 行`);
+    res.json({ success: true, message: `遷移成功 ${insertedCount} 行`, offlineRowsBefore, offlineRowsAfter, onlineRowsBefore, onlineRowsAfter, migratedCount: insertedCount, duplicateCount });
+  } catch (err) {
+    addLog('error', `遷移失敗: ${err.message}`);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// API: 按 ID 列表合併
+app.post('/api/merge-by-ids', async (req, res) => {
+  const { table, ids } = req.body;
+  if (!table || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: '缺少參數或 ID 列表為空' });
+  }
+  const offlinePool = pools['offline'];
+  const onlinePool = pools['online'];
+  if (!offlinePool || !onlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+  try {
+    const offlineCountBefore = await offlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const offlineRowsBefore = parseInt(offlineCountBefore.rows[0].count);
+    const onlineCountBefore = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsBefore = parseInt(onlineCountBefore.rows[0].count);
+    const placeholders = ids.map((_, i) => `$${i + 1}`).join(', ');
+    const sourceResult = await offlinePool.query(
+      `SELECT * FROM "${table}" WHERE id IN (${placeholders})`,
+      ids
+    );
+    const rows = sourceResult.rows;
+    if (rows.length === 0) {
+      return res.json({ success: true, message: '指定 ID 的數據為空', mergedCount: 0 });
+    }
+    const columns = Object.keys(rows[0]);
+    const columnNames = columns.map(c => `"${c}"`).join(', ');
+    let insertedCount = 0, duplicateCount = 0;
+    for (const row of rows) {
+      try {
+        const values = columns.map(c => row[c]);
+        const ph = columns.map((_, i) => `$${i + 1}`).join(', ');
+        await onlinePool.query(`INSERT INTO "${table}" (${columnNames}) VALUES (${ph})`, values);
+        insertedCount++;
+      } catch (err) {
+        if (err.code === '23505') duplicateCount++;
+        else throw err;
+      }
+    }
+    const onlineCountAfter = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineRowsAfter = parseInt(onlineCountAfter.rows[0].count);
+    addLog('info', `按 ID 合併完成: ${insertedCount} 行`);
+    res.json({ success: true, message: `合併成功 ${insertedCount} 行`, offlineRowsBefore, onlineRowsBefore, onlineRowsAfter, mergedCount: insertedCount, duplicateCount });
+  } catch (err) {
+    addLog('error', `合併失敗: ${err.message}`);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// API: 獲取表格的所有數據
+app.post('/api/get-table-data', async (req, res) => {
+  const { table, database } = req.body;
+  if (!table || !database) {
+    return res.status(400).json({ error: '缺少參數' });
+  }
+  const pool = pools[database];
+  if (!pool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+  try {
+    const result = await pool.query(`SELECT * FROM "${table}" ORDER BY id ASC`);
+    res.json({ success: true, data: result.rows, count: result.rows.length });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
 app.listen(PORT, () => {
   addLog('info', `DevLog 服務器啟動成功，監聽端口 ${PORT}`);
   console.log(`🚀 DevLog 服務器運行在 http://localhost:${PORT}`);
