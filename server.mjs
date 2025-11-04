@@ -371,6 +371,84 @@ app.post('/api/migrate-all', async (req, res) => {
   }
 });
 
+// API: 合併表格 - 從 OFFLINE 添加到 ONLINE（不覆蓋）
+app.post('/api/merge', async (req, res) => {
+  const { table } = req.body;
+
+  if (!table) {
+    return res.status(400).json({ error: '缺少 table 參數' });
+  }
+
+  const offlinePool = pools['offline'];
+  const onlinePool = pools['online'];
+
+  if (!offlinePool || !onlinePool) {
+    return res.status(503).json({ error: '數據庫連接不完整' });
+  }
+
+  try {
+    addLog('info', `開始合併表格 [${table}]`);
+
+    // 獲取 OFFLINE 的數據
+    const sourceResult = await offlinePool.query(`SELECT * FROM "${table}"`);
+    const offlineRows = sourceResult.rows;
+
+    if (offlineRows.length === 0) {
+      addLog('warn', `表格 [${table}] 為空`);
+      return res.json({ success: true, message: '表格為空，無需合併', mergedCount: 0 });
+    }
+
+    // 獲取 ONLINE 的現有數據
+    const onlineCountResult = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineCountBefore = parseInt(onlineCountResult.rows[0].count);
+
+    // 插入新數據（避免重複）
+    const columns = Object.keys(offlineRows[0]);
+    const columnNames = columns.map(c => `"${c}"`).join(', ');
+    let mergedCount = 0;
+    let duplicateCount = 0;
+
+    for (const row of offlineRows) {
+      try {
+        const values = columns.map(c => row[c]);
+        const placeholders = columns.map((_, i) => `$${i + 1}`).join(', ');
+        
+        await onlinePool.query(
+          `INSERT INTO "${table}" (${columnNames}) VALUES (${placeholders})`,
+          values
+        );
+        mergedCount++;
+      } catch (err) {
+        // 如果是重複鍵錯誤，跳過
+        if (err.code === '23505') {
+          duplicateCount++;
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    // 獲取合併後的計數
+    const onlineCountResult = await onlinePool.query(`SELECT COUNT(*) as count FROM "${table}"`);
+    const onlineCountAfter = parseInt(onlineCountResult.rows[0].count);
+
+    addLog('info', `表格 [${table}] 合併完成，合併 ${mergedCount} 行，重複 ${duplicateCount} 行`);
+    
+    res.json({ 
+      success: true, 
+      message: `合併成功，共合併 ${mergedCount} 行，跳過重複 ${duplicateCount} 行`, 
+      offlineCount: offlineRows.length,
+      onlineCountBefore,
+      mergedCount,
+      duplicateCount,
+      onlineCountAfter
+    });
+  } catch (err) {
+    addLog('error', `合併失敗 [${table}]`, err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
 // API: 驗證數據完整性
 app.post('/api/verify', async (req, res) => {
   const { table } = req.body;

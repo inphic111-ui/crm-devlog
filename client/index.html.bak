@@ -769,47 +769,6 @@
             }
         }
 
-        async function mergeTable() {
-            const table = document.getElementById('migrateTable').value;
-            if (!table) {
-                showMessage('請選擇表格', 'error', 'migrate');
-                return;
-            }
-
-            if (!confirm(`確定要合併表格 "${table}" 嗎？此操作將不覆蓋 ONLINE 的現有數據。`)) return;
-
-            try {
-                const response = await fetch('/api/merge', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ table })
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    showMessage('合併失敗: ' + data.error, 'error', 'migrate');
-                    return;
-                }
-
-                const resultHtml = `
-                    <div class="message message-success">
-                        <strong>✓ 合併成功！</strong><br>
-                        OFFLINE 客戶: ${data.offlineCount}<br>
-                        ONLINE 客戶(合併前): ${data.onlineCountBefore}<br>
-                        新合併: ${data.mergedCount}<br>
-                        跳過重複: ${data.duplicateCount}<br>
-                        ONLINE 客戶(合併後): ${data.onlineCountAfter}
-                    </div>
-                `;
-                document.getElementById('migrateResult').innerHTML = resultHtml;
-                showMessage(data.message, 'success', 'migrate');
-                loadMigrateTables();
-            } catch (err) {
-                showMessage('合併失敗: ' + err.message, 'error', 'migrate');
-            }
-        }
-
         async function migrateAll() {
             if (!confirm('確定要遷移所有表格嗎？這將清空 ONLINE 環境的所有數據！')) return;
 
