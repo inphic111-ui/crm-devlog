@@ -1108,15 +1108,16 @@
                 showMessage('部分遷移失敗: ' + err.message, 'error', 'migrate');
             }
         }
-    </script>
 
+        // ===== 客戶選擇和遷移功能 =====
+        
         // 加載客戶列表
         async function loadCustomerList() {
-            const database = document.getElementById('selectDatabase').value;
-            const tbody = document.getElementById('customerTableBody');
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">加載中...</td></tr>';
-            
             try {
+                const database = document.getElementById('selectDatabase').value;
+                const tbody = document.getElementById('customerTableBody');
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 20px;">加載中...</td></tr>';
+                
                 const response = await fetch('/api/get-table-data', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1147,49 +1148,71 @@
                 document.getElementById('customerListContainer').style.display = 'block';
                 updateSelectedCount();
             } catch (err) {
+                console.error('加載客戶列表失敗:', err);
+                const tbody = document.getElementById('customerTableBody');
                 tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 20px; color: red;">錯誤: ${err.message}</td></tr>`;
             }
         }
 
         // 全選
         function selectAllCustomers() {
-            document.querySelectorAll('.customerCheckbox').forEach(cb => cb.checked = true);
-            updateSelectedCount();
+            try {
+                document.querySelectorAll('.customerCheckbox').forEach(cb => cb.checked = true);
+                updateSelectedCount();
+            } catch (err) {
+                console.error('全選失敗:', err);
+            }
         }
 
         // 反選
         function deselectAllCustomers() {
-            document.querySelectorAll('.customerCheckbox').forEach(cb => cb.checked = false);
-            updateSelectedCount();
+            try {
+                document.querySelectorAll('.customerCheckbox').forEach(cb => cb.checked = false);
+                updateSelectedCount();
+            } catch (err) {
+                console.error('反選失敗:', err);
+            }
         }
 
         // 更新選中計數
         function updateSelectedCount() {
-            const count = document.querySelectorAll('.customerCheckbox:checked').length;
-            document.getElementById('selectedCount').textContent = `已選擇: ${count} 個客戶`;
+            try {
+                const count = document.querySelectorAll('.customerCheckbox:checked').length;
+                const countElement = document.getElementById('selectedCount');
+                if (countElement) {
+                    countElement.textContent = `已選擇: ${count} 個客戶`;
+                }
+            } catch (err) {
+                console.error('更新計數失敗:', err);
+            }
         }
 
         // 獲取選中的 ID
         function getSelectedIds() {
-            return Array.from(document.querySelectorAll('.customerCheckbox:checked')).map(cb => parseInt(cb.value));
+            try {
+                return Array.from(document.querySelectorAll('.customerCheckbox:checked')).map(cb => parseInt(cb.value));
+            } catch (err) {
+                console.error('獲取選中 ID 失敗:', err);
+                return [];
+            }
         }
 
         // 遷移選中的客戶
         async function migrateSelectedCustomers() {
-            const ids = getSelectedIds();
-            if (ids.length === 0) {
-                alert('請先選擇客戶');
-                return;
-            }
-            
-            if (!confirm(`確認遷移 ${ids.length} 個客戶嗎？\n\nOFFLINE 的數據將被刪除，ONLINE 將增加這些客戶。`)) {
-                return;
-            }
-            
-            const resultDiv = document.getElementById('selectResult');
-            resultDiv.innerHTML = '<p style="color: #666;">遷移中...</p>';
-            
             try {
+                const ids = getSelectedIds();
+                if (ids.length === 0) {
+                    alert('請先選擇客戶');
+                    return;
+                }
+                
+                if (!confirm(`確認遷移 ${ids.length} 個客戶嗎？\n\nOFFLINE 的數據將被刪除，ONLINE 將增加這些客戶。`)) {
+                    return;
+                }
+                
+                const resultDiv = document.getElementById('selectResult');
+                resultDiv.innerHTML = '<p style="color: #666;">遷移中...</p>';
+                
                 const response = await fetch('/api/migrate-by-ids', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1210,26 +1233,28 @@
                     resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${result.error}</strong></div>`;
                 }
             } catch (err) {
+                console.error('遷移失敗:', err);
+                const resultDiv = document.getElementById('selectResult');
                 resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${err.message}</strong></div>`;
             }
         }
 
         // 合併選中的客戶
         async function mergeSelectedCustomers() {
-            const ids = getSelectedIds();
-            if (ids.length === 0) {
-                alert('請先選擇客戶');
-                return;
-            }
-            
-            if (!confirm(`確認合併 ${ids.length} 個客戶嗎？\n\nOFFLINE 的數據將保留，ONLINE 將增加這些客戶。`)) {
-                return;
-            }
-            
-            const resultDiv = document.getElementById('selectResult');
-            resultDiv.innerHTML = '<p style="color: #666;">合併中...</p>';
-            
             try {
+                const ids = getSelectedIds();
+                if (ids.length === 0) {
+                    alert('請先選擇客戶');
+                    return;
+                }
+                
+                if (!confirm(`確認合併 ${ids.length} 個客戶嗎？\n\nOFFLINE 的數據將保留，ONLINE 將增加這些客戶。`)) {
+                    return;
+                }
+                
+                const resultDiv = document.getElementById('selectResult');
+                resultDiv.innerHTML = '<p style="color: #666;">合併中...</p>';
+                
                 const response = await fetch('/api/merge-by-ids', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1249,59 +1274,11 @@
                     resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${result.error}</strong></div>`;
                 }
             } catch (err) {
+                console.error('合併失敗:', err);
+                const resultDiv = document.getElementById('selectResult');
                 resultDiv.innerHTML = `<div style="background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; padding: 15px; color: #721c24;"><strong>✗ 錯誤: ${err.message}</strong></div>`;
             }
         }
+    </script>
 </body>
-                <h3>單個表格遷移</h3>
-                <div style="margin-bottom: 15px;">
-                    <select id="migrateTable" style="width: 100%; padding: 8px; margin-bottom: 10px;">
-                        <option value="">選擇表格...</option>
-                        <option value="customers">customers</option>
-                        <option value="users">users</option>
-                    </select>
-                </div>
-
-                <div style="margin-bottom: 15px;">
-                    <label style="display: block; margin-bottom: 10px;"><strong>遷移模式：</strong></label>
-                    <div style="margin-left: 10px;">
-                        <label style="display: block; margin-bottom: 8px;">
-                            <input type="radio" name="migrateMode" value="full" checked> 全部遷移
-                        </label>
-                        <label style="display: block; margin-bottom: 8px;">
-                            <input type="radio" name="migrateMode" value="range"> ID 範圍遷移
-                        </label>
-                        <label style="display: block; margin-bottom: 8px;">
-                            <input type="radio" name="migrateMode" value="condition"> 條件遷移
-                        </label>
-                    </div>
-                </div>
-
-                <div id="rangeOptions" style="display: none; margin-bottom: 15px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
-                    <label style="display: block; margin-bottom: 8px;">
-                        ID 從：<input type="number" id="idFrom" placeholder="1" style="width: 100px; padding: 5px;">
-                    </label>
-                    <label style="display: block; margin-bottom: 8px;">
-                        ID 到：<input type="number" id="idTo" placeholder="50" style="width: 100px; padding: 5px;">
-                    </label>
-                    <button onclick="previewRangeMigration()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">預覽</button>
-                    <span id="rangePreview" style="margin-left: 10px; color: #666;"></span>
-                </div>
-
-                <div id="conditionOptions" style="display: none; margin-bottom: 15px; padding: 10px; background: #f0f0f0; border-radius: 4px;">
-                    <label style="display: block; margin-bottom: 8px;">
-                        SQL 條件：<input type="text" id="condition" placeholder="status = 'active'" style="width: 100%; padding: 5px; box-sizing: border-box;">
-                    </label>
-                    <small style="color: #666;">例如：status = 'active' 或 created_at >= '2025-01-01'</small><br>
-                    <button onclick="previewConditionMigration()" style="padding: 6px 12px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 8px;">預覽</button>
-                    <span id="conditionPreview" style="margin-left: 10px; color: #666;"></span>
-                </div>
-
-                <div style="margin-bottom: 15px;">
-                    <button onclick="migrateTable()" style="padding: 10px 20px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">遷移此表格</button>
-                    <button onclick="partialMigrateTable()" style="padding: 10px 20px; background: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">執行部分遷移</button>
-                    <button onclick="mergeTable()" style="padding: 10px 20px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">合併此表格</button>
-                    <button onclick="validateTable()" style="padding: 10px 20px; background: #00BCD4; color: white; border: none; border-radius: 4px; cursor: pointer;">驗證此表格</button>
-                </div>
-
-                <div id="migrateResult" style="margin-top: 15px;"></div>
+</html>
